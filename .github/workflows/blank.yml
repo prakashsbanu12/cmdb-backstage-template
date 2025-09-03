@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run a one-line script
+        run: echo Hello, world!
+
+      - name: Run a multi-line script
+        run: |
+          echo Add other actions to build,
+          echo test, and deploy your project.
+
+      - name: Query CMDB from ServiceNow
+        env:
+          CLIENT_ID: ${{ secrets.SN_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.SN_CLIENT_SECRET }}
+          INSTANCE_URL: ${{ secrets.SN_INSTANCE_URL }}
+          USERNAME: ${{ secrets.SN_USERNAME }}
+          PASSWORD: ${{ secrets.SN_PASSWORD }}
+        run: |
+          echo "Authenticating with ServiceNow..."
+
+          TOKEN_RESPONSE=$(curl -s --request POST "$INSTANCE_URL/oauth_token.do" \
+            --header "Content-Type: application/x-www-form-urlencoded" \
+            --data "grant_type=password&client_id=$CLIENT_ID&client_secret=$CLIENT_SECRET&username=$USERNAME&password=$PASSWORD")
+
+          ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token')
+
+          if [ "$ACCESS_TOKEN" == "null" ] || [ -z "$ACCESS_TOKEN" ]; then
+            echo "❌ Failed to retrieve access token"
+            exit 1
+          fi
+
+          echo "✅ Access token retrieved. Querying CMDB..."
+
+          CMDB_RESPONSE=$(curl -s --request GET "$INSTANCE_URL/api/now/table/cmdb_ci?sysparm_limit=5" \
+            --header "Authorization: Bearer $ACCESS_TOKEN" \
+            --header "Accept: application/json")
+
+          echo "🔍 CMDB Results:"
+          echo "$CMDB_RESPONSE" | jq '.result[] | {name: .name, class: .sys_class_name, id: .sys_id}'
